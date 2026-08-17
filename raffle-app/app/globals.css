@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    @apply bg-background text-on-background font-sans antialiased;
+  }
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+@layer components {
+  /* Level 1 card per DESIGN.md: pure white, 1px stroke, ambient shadow */
+  .card-surface {
+    @apply bg-surface-container-lowest border border-outline-variant/60 rounded-lg shadow-ambient;
+  }
+
+  /* Level 2 overlay/modal: translucent white + 20px backdrop blur */
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-glass border border-outline-variant/60 rounded-lg;
+  }
+
+  .label-uppercase {
+    @apply text-label-md uppercase tracking-wide text-on-surface-variant;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded bg-primary text-on-primary
+      font-semibold text-body-md px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]
+      transition hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded bg-secondary text-on-secondary
+      font-semibold text-body-md px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]
+      transition hover:bg-secondary/90 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded border border-outline-variant
+      bg-surface-container-lowest text-on-surface font-semibold text-body-md px-4 py-2.5
+      transition hover:bg-surface-container-low disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .input-field {
+    @apply w-full rounded border border-outline-variant bg-surface-container-lowest px-3 py-2
+      text-body-md text-on-surface placeholder:text-on-surface-variant/60
+      focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/15 transition;
+  }
+
+  .badge-gold {
+    @apply inline-flex items-center gap-1 rounded-full bg-gold/15 text-tertiary-container
+      px-2.5 py-1 text-label-md;
+  }
+
+  .badge-standard {
+    @apply inline-flex items-center gap-1 rounded-full bg-surface-container-high text-on-surface
+      px-2.5 py-1 text-label-md;
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+
+  .dark .bg-background {
+    background-color: #020617;
+  }
+
+  .dark .text-on-background,
+  .dark .text-on-surface,
+  .dark .text-on-surface-variant,
+  .dark .text-primary,
+  .dark .text-secondary,
+  .dark .text-tertiary,
+  .dark .text-on-primary,
+  .dark .text-on-secondary,
+  .dark .text-on-error {
+    color: #e2e8f0;
+  }
+
+  .dark .bg-surface-container-lowest {
+    background-color: #0f172a;
+    border-color: #334155;
+  }
+
+  .dark .bg-surface-container-low {
+    background-color: #111827;
+  }
+
+  .dark .bg-surface-container-high {
+    background-color: #1f2937;
+  }
+
+  .dark .bg-primary-fixed {
+    background-color: #0f172a;
+  }
+
+  .dark .bg-primary-fixed-dim {
+    background-color: #152236;
+  }
+
+  .dark .bg-secondary-fixed {
+    background-color: #134e4a;
+  }
+
+  .dark .border-outline-variant,
+  .dark .border-outline-variant\[\/60\] {
+    border-color: #475569;
+  }
+
+  .dark .card-surface {
+    background-color: #0f172a;
+    border-color: #334155;
+  }
+
+  .dark .glass-panel {
+    @apply bg-slate-900/80 border-slate-600;
+  }
+
+  .dark .input-field {
+    @apply bg-slate-900 border-slate-600 text-slate-100 placeholder:text-slate-400;
+  }
+
+  .dark .btn-outline,
+  .dark .btn-secondary,
+  .dark .btn-primary {
+    @apply text-slate-100;
+  }
+
+  .dark .badge-gold {
+    @apply bg-yellow-500/15 text-yellow-200;
+  }
+
+  .dark .badge-standard {
+    @apply bg-slate-800 text-slate-200;
+  }
+
+  .dark .badge-success {
+    @apply bg-emerald-500/15 text-emerald-200;
+  }
+
+  .badge-success {
+    @apply inline-flex items-center gap-1 rounded-full bg-secondary-container text-on-secondary-container
+      px-2.5 py-1 text-label-md;
+  }
+}

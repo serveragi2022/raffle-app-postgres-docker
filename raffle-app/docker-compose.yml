@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://raffle:serveradmin@host.docker.internal:5432/raffle}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+      SESSION_SECRET: ${SESSION_SECRET:-xJ15eouDTBMyllEv+vnCG6wwnskv5fvJyHLJ9wa0fLY=}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
