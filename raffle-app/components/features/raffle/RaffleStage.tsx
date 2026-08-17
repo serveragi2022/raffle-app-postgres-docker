@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, RotateCcw, Ticket, Star } from "lucide-react";
@@ -65,6 +65,12 @@ export function RaffleStage({
   const spinMs = Math.max(2000, Math.round(baseSpinMs * animationFactor));
   const marqueeIntervalMs = animationSpeed === "fast" ? 450 : animationSpeed === "slow" ? 1050 : 700;
   const revealTransitionDuration = animationSpeed === "fast" ? 0.25 : animationSpeed === "slow" ? 0.8 : 0.45;
+  // How long to let the winner reveal + confetti "celebration" play before
+  // the Recent Winners list updates in the background. This is deliberately
+  // NOT tied to revealTransitionDuration (that's just the ~250-800ms name
+  // fade-in) — confetti keeps falling for several seconds after that, and
+  // that's the moment people are actually watching.
+  const celebrationHoldMs = animationSpeed === "fast" ? 2200 : animationSpeed === "slow" ? 4200 : 3200;
   const confettiEnabled = settings?.confetti_enabled ?? true;
   const soundEnabled = settings?.sound_enabled ?? false;
   const logoUrl = settings?.company_logo_url ?? null;
@@ -89,7 +95,10 @@ export function RaffleStage({
   const [marqueeFontSize, setMarqueeFontSize] = useState<string>(nameFontSize(""));
 
   useEffect(() => {
-    // load recent winners on mount and after each reveal
+    // Load recent winners on mount and whenever we're NOT in the middle of
+    // a reveal. When phase becomes 'revealed', delay the refresh until the
+    // reveal animation finishes so the winner doesn't appear in the Recent
+    // Winners list before their name has finished animating on stage.
     async function loadRecent() {
       try {
         const res = await fetch('/api/winners/recent');
@@ -99,54 +108,48 @@ export function RaffleStage({
         // ignore errors silently
       }
     }
-    loadRecent();
-    let revealTimeout: ReturnType<typeof setTimeout> | null = null;
-    if (phase === 'revealed') {
-      // Delay updating the recent winners list until the reveal animation finishes
-      // so the revealed animation completes before the new winner appears in the list.
-      const delayMs = Math.max(300, Math.round(revealTransitionDuration * 1000) + 200);
-      revealTimeout = setTimeout(() => {
-        if (currentWinner) {
-          setRecentWinners((prev) => [
-            {
-              id: currentWinner.winner_id ?? currentWinner.participant_id,
-              employee_name: currentWinner.employee_name,
-              department_name: currentWinner.department_name,
-              drawn_at: currentWinner.drawn_at,
-            },
-            ...prev.filter((r) => (r.id !== (currentWinner.winner_id ?? currentWinner.participant_id))),
-          ]);
-        }
-        loadRecent();
-      }, delayMs);
+
+    if (phase !== 'revealed') {
+      loadRecent();
+      return;
     }
-    return () => {
-      if (revealTimeout) clearTimeout(revealTimeout);
-    };
+
+    const delayMs = celebrationHoldMs;
+    const revealTimeout = setTimeout(() => {
+      if (currentWinner) {
+        setRecentWinners((prev) => [
+          {
+            id: currentWinner.winner_id ?? currentWinner.participant_id,
+            employee_name: currentWinner.employee_name,
+            department_name: currentWinner.department_name,
+            drawn_at: currentWinner.drawn_at,
+          },
+          ...prev.filter((r) => (r.id !== (currentWinner.winner_id ?? currentWinner.participant_id))),
+        ]);
+      }
+      loadRecent();
+    }, delayMs);
+
+    return () => clearTimeout(revealTimeout);
   }, [phase]);
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadRemaining() {
-      try {
-        const res = await fetch('/api/slot-groups/remaining');
-        const data = await res.json();
-        if (res.ok && typeof data.remaining === 'number' && mounted) setRemainingSlots(data.remaining);
-      } catch (e) {
-        // ignore
-      }
+  const loadRemaining = useCallback(async () => {
+    try {
+      const res = await fetch('/api/slot-groups/remaining');
+      const data = await res.json();
+      if (res.ok && typeof data.remaining === 'number') setRemainingSlots(data.remaining);
+    } catch (e) {
+      // ignore
     }
-
-    // initial load
-    loadRemaining();
-
-    // poll every 3 seconds for near-real-time updates
-    const id = setInterval(loadRemaining, 3000);
-    return () => {
-      mounted = false;
-      clearInterval(id);
-    };
   }, []);
+
+  useEffect(() => {
+    // Single source of truth for remainingSlots: load once on mount, then
+    // it's only refreshed again right after each draw completes (see
+    // handleStartDraw's loadRemaining() call below). No background polling
+    // — one mechanism managing this number, not two racing each other.
+    loadRemaining();
+  }, [loadRemaining]);
 
   useEffect(() => {
     const updateSize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
@@ -174,52 +177,12 @@ export function RaffleStage({
   const [localGroups, setLocalGroups] = useState<RaffleSlotGroupOption[]>(() => slotGroups);
 
   const availableGroups = localGroups.filter((g) => g.winners_drawn < g.slot_limit);
-  const selectedGroup = availableGroups.length > 0
-    ? availableGroups[Math.floor(Math.random() * availableGroups.length)]
-    : localGroups[0] ?? {
-        id: "",
-        group_name: "ALL",
-        is_all: true,
-        slot_limit: 0,
-        winners_drawn: 0,
-      };
   const noAvailableGroup = availableGroups.length === 0;
   const groupFull = noAvailableGroup;
 
   async function handleStartDraw() {
-    if (!selectedGroup?.id || groupFull) {
+    if (groupFull) {
       setError("No available slot groups remain with open draws.");
-      return;
-    }
-    // Try the selected group first, then fall back to any other available group
-    let finalGroup = selectedGroup;
-    try {
-      const candidates = [selectedGroup, ...availableGroups.filter((g) => g.id !== selectedGroup.id)];
-      let found = false;
-      for (const g of candidates) {
-        try {
-          const eligRes = await fetch("/api/raffle/eligible", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ slotGroupId: g.id }),
-            credentials: "same-origin",
-          });
-          const eligData = await eligRes.json();
-          if (eligRes.ok && Array.isArray(eligData) && eligData.length > 0) {
-            finalGroup = g;
-            found = true;
-            break;
-          }
-        } catch (innerErr) {
-          // ignore and try next group
-        }
-      }
-      if (!found) {
-        setError("No eligible participants remain.");
-        return;
-      }
-    } catch (e: any) {
-      setError(e.message ?? String(e));
       return;
     }
 
@@ -239,11 +202,15 @@ export function RaffleStage({
       setMarqueeFontSize(uniformMarqueeFontSize(displayNames));
       startSpin();
 
-      // Perform the actual draw (server enforces slot-group eligibility)
+      // Perform the actual draw. No slotGroupId is sent — the server picks
+      // uniformly at random among slot groups that still have open capacity
+      // and eligible participants (see draw_random_slot() in db/init.sql),
+      // so draws genuinely hop between groups instead of exhausting one
+      // group before moving to the next.
       const res = await fetch("/api/raffle/draw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotGroupId: finalGroup.id }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Draw failed");
@@ -252,14 +219,19 @@ export function RaffleStage({
         timeoutRef.current = null;
         reveal(data as DrawResult);
 
-        // Optimistically update local slot group counts and remaining slots
+        // Update local slot group counts optimistically (fine — this only
+        // affects which groups still show as "available" client-side), but
+        // fetch the authoritative remaining-slots number from the server
+        // instead of guessing with "-1", since the draw was committed to
+        // the DB well before this timeout fired and the background poll
+        // may have already picked it up.
         try {
           const groupId = (data as DrawResult).slot_group_id;
           setLocalGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, winners_drawn: (g.winners_drawn ?? 0) + 1 } : g)));
-          setRemainingSlots((r) => Math.max(0, r - 1));
         } catch (e) {
           // ignore optimistic update failures
         }
+        loadRemaining();
 
         // Refresh server-rendered data (slot groups, counts) so parent server components update
         try {

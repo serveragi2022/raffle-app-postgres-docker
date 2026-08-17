@@ -59,8 +59,8 @@ function LoginForm() {
           <div className="w-14 h-14 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-ambient mb-4">
             <ShieldCheck size={28} />
           </div>
-          <h1 className="text-headline-md text-on-surface">RaffleAdmin</h1>
-          <p className="text-body-md text-on-surface-variant">Raffle Administration</p>
+          <h1 className="text-headline-md text-on-surface">Raffle</h1>
+          <p className="text-body-md text-on-surface-variant">Food Safety Raffle</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card-surface p-8 space-y-5">

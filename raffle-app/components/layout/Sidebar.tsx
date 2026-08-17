@@ -35,8 +35,8 @@ export function Sidebar({ eventStatus, role }: { eventStatus?: string; role?: Ap
           <ShieldCheck size={20} />
         </div>
         <div>
-          <p className="text-title-lg text-on-surface leading-tight">RaffleAdmin</p>
-          <p className="text-label-md text-on-surface-variant">Raffle Administration</p>
+          <p className="text-title-lg text-on-surface leading-tight">Raffle</p>
+          <p className="text-label-md text-on-surface-variant">Food Safety Raffle</p>
         </div>
       </div>
 

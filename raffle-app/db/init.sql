@@ -184,10 +184,11 @@ stable
 as $$
 declare
   v_is_all boolean;
+  v_applies_to_all boolean;
   v_slot_limit int;
   v_winners_count int;
 begin
-  select is_all, slot_limit into v_is_all, v_slot_limit
+  select is_all, applies_to_all, slot_limit into v_is_all, v_applies_to_all, v_slot_limit
   from slot_groups where id = p_slot_group_id and raffle_event_id = p_raffle_event_id;
 
   if not found then
@@ -200,7 +201,7 @@ begin
     return;
   end if;
 
-  if not v_is_all then
+  if not (v_is_all or v_applies_to_all) then
     return query
       select p.id, p.employee_name, p.department_id, d.department_name
       from participants p
@@ -210,16 +211,22 @@ begin
         and sgd.slot_group_id = p_slot_group_id
         and p.id not in (select w.participant_id from winners w where w.raffle_event_id = p_raffle_event_id);
   else
-    -- ALL DEPARTMENTS should draw from every remaining participant in the event,
-    -- regardless of other slot groups. The "already won" check is the only
-    -- eligibility gate for the ALL group; department caps are enforced by the
-    -- group-specific non-ALL queries instead.
     return query
       select p.id, p.employee_name, p.department_id, d.department_name
       from participants p
       join departments d on d.id = p.department_id
       where p.raffle_event_id = p_raffle_event_id
-        and p.id not in (select w.participant_id from winners w where w.raffle_event_id = p_raffle_event_id);
+        and p.id not in (select w.participant_id from winners w where w.raffle_event_id = p_raffle_event_id)
+        and not exists (
+          select 1
+          from slot_group_departments sgd
+          join slot_groups sg on sg.id = sgd.slot_group_id
+          left join (
+            select slot_group_id, count(*) as won from winners group by slot_group_id
+          ) wcount on wcount.slot_group_id = sg.id
+          where sgd.department_id = p.department_id
+            and coalesce(wcount.won, 0) >= sg.slot_limit
+        );
   end if;
 end;
 $$;
@@ -278,6 +285,55 @@ begin
 end;
 $$;
 
+-- Picks ONE slot group uniformly at random among those that (a) still have
+-- open capacity and (b) currently have at least one eligible participant,
+-- then draws from it. This is the entry point the app calls for a normal
+-- "Start Draw" click — the client never decides which group to draw from,
+-- so the choice is genuinely random across groups on every single draw
+-- (no group needs to be fully exhausted before another gets picked, and no
+-- deterministic fallback order kicks in the way a client-side retry loop
+-- would produce).
+create or replace function draw_random_slot(
+  p_raffle_event_id uuid,
+  p_performed_by uuid default null
+)
+returns table (
+  winner_id uuid,
+  participant_id uuid,
+  employee_name text,
+  department_id uuid,
+  department_name text,
+  slot_group_id uuid,
+  group_name text,
+  drawn_at timestamptz
+)
+language plpgsql
+security definer
+as $$
+declare
+  v_slot_group_id uuid;
+begin
+  perform pg_advisory_xact_lock(hashtextextended(p_raffle_event_id::text, 0));
+
+  select sg.id into v_slot_group_id
+  from slot_groups sg
+  left join (
+    select slot_group_id, count(*) as won from winners where raffle_event_id = p_raffle_event_id group by slot_group_id
+  ) w on w.slot_group_id = sg.id
+  where sg.raffle_event_id = p_raffle_event_id
+    and coalesce(w.won, 0) < sg.slot_limit
+    and exists (select 1 from eligible_participants(p_raffle_event_id, sg.id))
+  order by random()
+  limit 1;
+
+  if v_slot_group_id is null then
+    raise exception 'NO_ELIGIBLE_PARTICIPANTS' using errcode = 'P0001';
+  end if;
+
+  return query select * from draw_winner(p_raffle_event_id, v_slot_group_id, p_performed_by);
+end;
+$$;
+
 create or replace function redraw_winner(
   p_raffle_event_id uuid,
   p_slot_group_id uuid,
@@ -302,10 +358,10 @@ declare
 begin
   perform pg_advisory_xact_lock(hashtextextended(p_raffle_event_id::text, 0));
 
-  select w.id, w.participant_id into v_last_winner_id, v_last_participant_id
-  from winners w
-  where w.raffle_event_id = p_raffle_event_id and w.slot_group_id = p_slot_group_id
-  order by w.drawn_at desc
+  select id, participant_id into v_last_winner_id, v_last_participant_id
+  from winners
+  where raffle_event_id = p_raffle_event_id and slot_group_id = p_slot_group_id
+  order by drawn_at desc
   limit 1;
 
   if v_last_winner_id is null then

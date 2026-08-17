@@ -54,6 +54,25 @@ export async function drawWinner(
   }
 }
 
+/**
+ * Draws a winner from a uniformly-random slot group among those that still
+ * have open capacity and eligible participants — the group choice is made
+ * entirely inside Postgres (see draw_random_slot() in db/init.sql), so
+ * there's no client-side "try this group, fall back to that group" loop
+ * that could bias toward a deterministic order.
+ */
+export async function drawRandomSlot(raffleEventId: string, performedBy: string | null): Promise<DrawResult> {
+  try {
+    const { rows } = await query<DrawResult>(`select * from draw_random_slot($1, $2)`, [
+      raffleEventId,
+      performedBy,
+    ]);
+    return rows[0];
+  } catch (err: any) {
+    throw toEngineError(err);
+  }
+}
+
 export async function redrawWinner(
   raffleEventId: string,
   slotGroupId: string,
