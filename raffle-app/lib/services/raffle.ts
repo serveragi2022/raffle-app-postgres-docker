@@ -32,7 +32,7 @@ function toEngineError(err: { message?: string }): RaffleEngineError {
     return new RaffleEngineError("No eligible participants remain.", "NO_ELIGIBLE_PARTICIPANTS");
   }
   if (err.message?.includes("NO_WINNER_TO_REDRAW")) {
-    return new RaffleEngineError("There is no winner to redraw for this slot group.", "NO_WINNER_TO_REDRAW");
+    return new RaffleEngineError("There is no winner to redraw.", "NO_WINNER_TO_REDRAW");
   }
   return new RaffleEngineError(err.message ?? "Unknown raffle engine error", "UNKNOWN");
 }

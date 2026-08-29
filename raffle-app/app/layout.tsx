@@ -9,7 +9,7 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "Food Safety Challenge",
+  title: "Food Safety Challenge Raffle",
   description: "Enterprise raffle management for the Food Safety Challenge.",
 };
 

@@ -73,7 +73,6 @@ function LoginForm() {
               className="input-field"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@company.com"
             />
           </div>
           <div>
@@ -102,7 +101,7 @@ function LoginForm() {
         </form>
 
         <p className="text-center text-body-md text-on-surface-variant mt-6">
-          Access is restricted to authorized raffle administrators and live raffle users.
+          Access is restricted to authorized raffle administrators.
         </p>
       </div>
     </div>
