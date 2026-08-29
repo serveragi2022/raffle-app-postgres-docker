@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://raffle:serveradmin@10.201.64.22:5432/raffle}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://raffle:serveradmin@localhost:5432/raffle}
       DATABASE_SSL: ${DATABASE_SSL:-false}
       SESSION_SECRET: ${SESSION_SECRET:-xJ15eouDTBMyllEv+vnCG6wwnskv5fvJyHLJ9wa0fLY=}
       NODE_ENV: production
