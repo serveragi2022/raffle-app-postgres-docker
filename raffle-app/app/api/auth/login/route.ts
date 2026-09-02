@@ -22,9 +22,13 @@ export async function POST(req: Request) {
     });
 
     const response = NextResponse.json({ role: user.role });
+    const isHttps =
+      process.env.NODE_ENV === "production" &&
+      process.env.COOKIE_SECURE === "true";
+
     response.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isHttps,
       sameSite: "lax",
       path: "/",
       maxAge: SESSION_MAX_AGE,
