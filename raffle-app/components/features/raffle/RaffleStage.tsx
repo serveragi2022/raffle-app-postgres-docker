@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, RotateCcw, Ticket, Star } from "lucide-react";
@@ -28,6 +28,8 @@ export interface RaffleStageSettings {
   spin_duration_ms: number;
   confetti_enabled: boolean;
   sound_enabled: boolean;
+  sound_audio_available: boolean;
+  sound_winner_available: boolean;
   company_logo_url: string | null;
 }
 
@@ -47,12 +49,14 @@ function uniformMarqueeFontSize(names: string[]): string {
 }
 
 export function RaffleStage({
+  raffleEventId,
   slotGroups,
   eventTitle,
   currentPool,
   settings,
   isViewer,
 }: {
+  raffleEventId: string;
   slotGroups: RaffleSlotGroupOption[];
   eventTitle: string;
   currentPool: number;
@@ -67,8 +71,15 @@ export function RaffleStage({
   const revealTransitionDuration = animationSpeed === "fast" ? 0.25 : animationSpeed === "slow" ? 0.8 : 0.45;
   const confettiEnabled = settings?.confetti_enabled ?? true;
   const soundEnabled = settings?.sound_enabled ?? false;
+  const soundAudioAvailable = settings?.sound_audio_available ?? false;
+  const soundWinnerAvailable = settings?.sound_winner_available ?? false;
   const logoUrl = settings?.company_logo_url ?? null;
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const uploadedSoundBufferRef = useRef<Record<"draw" | "winner", AudioBuffer | null>>({ draw: null, winner: null });
+  const soundLoadPromiseRef = useRef<Record<"draw" | "winner", Promise<AudioBuffer | null> | null>>({
+    draw: null,
+    winner: null,
+  });
 
   const { phase, currentWinner, startSpin, reveal, reset, error, setError } = useRaffleStore();
   const router = useRouter();
@@ -214,6 +225,39 @@ export function RaffleStage({
 
   const isDrawingRef = useRef(false);
 
+  const loadUploadedSound = useCallback(async (type: "draw" | "winner"): Promise<AudioBuffer | null> => {
+    if (uploadedSoundBufferRef.current[type]) return uploadedSoundBufferRef.current[type];
+    if (!(type === "draw" ? soundAudioAvailable : soundWinnerAvailable)) return null;
+    if (!soundLoadPromiseRef.current[type]) {
+      soundLoadPromiseRef.current[type] = (async () => {
+        try {
+          const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+          if (!AudioCtx) return null;
+          const ctx = audioCtxRef.current ?? new AudioCtx();
+          audioCtxRef.current = ctx;
+          const response = await fetch(
+            `/api/settings/sound?raffleEventId=${encodeURIComponent(raffleEventId)}&type=${type}`
+          );
+          if (!response.ok) return null;
+          const audioData = await response.arrayBuffer();
+          const buffer = await ctx.decodeAudioData(audioData);
+          uploadedSoundBufferRef.current[type] = buffer;
+          return buffer;
+        } catch (soundErr) {
+          console.warn("Custom raffle audio unavailable:", soundErr);
+          return null;
+        }
+      })();
+    }
+    return soundLoadPromiseRef.current[type];
+  }, [raffleEventId, soundAudioAvailable, soundWinnerAvailable]);
+
+  useEffect(() => {
+    if (!soundEnabled) return;
+    if (soundAudioAvailable) void loadUploadedSound("draw");
+    if (soundWinnerAvailable) void loadUploadedSound("winner");
+  }, [soundEnabled, soundAudioAvailable, soundWinnerAvailable, loadUploadedSound]);
+
   async function handleStartDraw() {
     // Guard against double-draws from a rapid double-click/double-tap.
     // `phase` only flips to "spinning" (which disables the button) after
@@ -228,6 +272,17 @@ export function RaffleStage({
       setError("No available slot remain with open draws.");
       isDrawingRef.current = false;
       return;
+    }
+    if (soundEnabled) {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx && !audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+        if (audioCtxRef.current?.state === "suspended") {
+          void audioCtxRef.current.resume().catch(() => {});
+        }
+      } catch (soundErr) {
+        console.warn("Raffle sound unavailable:", soundErr);
+      }
     }
     // Try the selected group first, then fall back to any other available group
     let finalGroup = selectedGroup;
@@ -271,6 +326,7 @@ export function RaffleStage({
       if (displayNames.length === 0) {
         throw new Error("No participants available to display.");
       }
+      if (soundEnabled && soundAudioAvailable) await loadUploadedSound("draw");
 
       // store pool for periodic reshuffles during the spin
       displayPoolRef.current = displayNames;
@@ -326,8 +382,72 @@ export function RaffleStage({
     return () => clearInterval(id);
   }, [phase, marqueeIntervalMs]);
 
-  // Plays a short two-note chime on reveal. Uses the Web Audio API directly
-  // rather than an <audio> element so no sound asset file is required.
+  // Generate an accelerating snare roll while the names are spinning.
+  useEffect(() => {
+    if (phase !== "spinning" || !soundEnabled || !audioCtxRef.current) return;
+    const ctx = audioCtxRef.current;
+    const durationSeconds = spinMs / 1000;
+    const uploadedSound = uploadedSoundBufferRef.current.draw;
+    if (uploadedSound) {
+      const source = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      const start = ctx.currentTime;
+      const end = start + durationSeconds;
+      source.buffer = uploadedSound;
+      source.loop = true;
+      gain.gain.setValueAtTime(0.85, start);
+      gain.gain.setValueAtTime(0.85, Math.max(start, end - 0.04));
+      gain.gain.linearRampToValueAtTime(0.0001, end);
+      source.connect(gain).connect(ctx.destination);
+      source.start(start);
+      source.stop(end);
+      return () => {
+        try {
+          source.stop();
+        } catch {
+          // The scheduled audio may have already ended.
+        }
+      };
+    }
+
+    const noiseBuffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.06), ctx.sampleRate);
+    const samples = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
+
+    const sources: AudioBufferSourceNode[] = [];
+    let elapsed = 0;
+    while (elapsed < durationSeconds) {
+      const progress = elapsed / durationSeconds;
+      const start = ctx.currentTime + elapsed;
+      const source = ctx.createBufferSource();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      source.buffer = noiseBuffer;
+      filter.type = "bandpass";
+      filter.frequency.value = 1800;
+      filter.Q.value = 0.8;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(0.04 + progress * 0.1, start + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.055);
+      source.connect(filter).connect(gain).connect(ctx.destination);
+      source.start(start);
+      source.stop(start + 0.06);
+      sources.push(source);
+      elapsed += 0.16 - progress * 0.09;
+    }
+
+    return () => {
+      sources.forEach((source) => {
+        try {
+          source.stop();
+        } catch {
+          // The scheduled hit may have already ended.
+        }
+      });
+    };
+  }, [phase, soundEnabled, spinMs]);
+
+  // Play the uploaded winner sound when available; otherwise use a short chime.
   useEffect(() => {
     if (phase !== "revealed" || !soundEnabled) return;
     try {
@@ -335,6 +455,20 @@ export function RaffleStage({
       if (!AudioCtx) return;
       if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
       const ctx = audioCtxRef.current;
+      const winnerSound = uploadedSoundBufferRef.current.winner;
+      if (winnerSound) {
+        const source = ctx.createBufferSource();
+        source.buffer = winnerSound;
+        source.connect(ctx.destination);
+        source.start();
+        return () => {
+          try {
+            source.stop();
+          } catch {
+            // The sound may have already finished.
+          }
+        };
+      }
       const notes = [880, 1318.51]; // A5 then E6 — a bright little "ta-da"
       notes.forEach((freq, i) => {
         const osc = ctx.createOscillator();

@@ -9,6 +9,14 @@
   body {
     @apply bg-background text-on-background font-sans antialiased;
   }
+  .app-backdrop {
+    background-color: #f4f6ed;
+    background-image:
+      linear-gradient(118deg, rgba(16, 125, 104, 0.09), transparent 42%),
+      linear-gradient(302deg, rgba(217, 143, 42, 0.1), transparent 45%),
+      linear-gradient(180deg, #fbfcf7 0%, #edf4ec 58%, #f7f0e4 100%);
+    background-attachment: fixed;
+  }
   ::selection {
     @apply bg-primary/20;
   }
@@ -65,6 +73,14 @@
 
   .dark body {
     @apply bg-slate-950 text-slate-100;
+  }
+
+  .dark .app-backdrop {
+    background-color: #101a17;
+    background-image:
+      linear-gradient(118deg, rgba(28, 112, 87, 0.2), transparent 42%),
+      linear-gradient(302deg, rgba(167, 112, 43, 0.16), transparent 45%),
+      linear-gradient(180deg, #111a17 0%, #15201b 58%, #211c14 100%);
   }
 
   .dark body {

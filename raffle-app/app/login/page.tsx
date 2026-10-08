@@ -40,6 +40,7 @@ function LoginForm() {
       }
 
       const role = json.role ?? "viewer";
+      setLoading(false);
       if (role === "admin") {
         router.replace(searchParams.get("redirect") || "/dashboard");
       } else {
@@ -53,7 +54,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-surface via-surface-container-low to-surface-dim px-4">
+    <div className="app-backdrop min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-[400px]">
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-ambient mb-4">

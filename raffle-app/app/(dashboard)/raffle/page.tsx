@@ -44,6 +44,7 @@ export default async function RafflePage() {
 
   return (
     <RaffleStage
+      raffleEventId={event.id}
       slotGroups={slotGroups}
       eventTitle={event.title}
       currentPool={currentPoolRow?.count ?? 0}

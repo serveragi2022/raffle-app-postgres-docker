@@ -26,7 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className={settings.dark_mode ? "dark" : ""}>
-      <div className="flex min-h-screen bg-background">
+      <div className="app-backdrop flex min-h-screen">
         <Sidebar eventStatus={event?.status} role={userRole} />
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <Topbar />

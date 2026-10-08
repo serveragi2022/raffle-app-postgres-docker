@@ -27,6 +27,8 @@ export default async function SettingsPage() {
       </div>
       <SettingsForm
         raffleEventId={event.id}
+        hasUploadedSound={settings.sound_audio_available}
+        hasUploadedWinnerSound={settings.sound_winner_available}
         initial={{
           dark_mode: settings.dark_mode,
           animation_speed: settings.animation_speed,

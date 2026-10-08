@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={montserrat.variable}>
-      <body className="bg-gradient-to-b from-primary/10 to-secondary-100 min-h-screen">
+      <body className="app-backdrop min-h-screen">
         {children}
       </body>
     </html>

@@ -1,4 +1,5 @@
 import { query, queryOne } from "@/lib/db";
+import { hasRaffleSound } from "@/lib/services/raffleSound.server";
 import type { AnimationSpeed } from "@/lib/types/database.types";
 
 export interface RaffleSettingsRow {
@@ -7,6 +8,8 @@ export interface RaffleSettingsRow {
   animation_speed: AnimationSpeed;
   spin_duration_ms: number;
   sound_enabled: boolean;
+  sound_audio_available: boolean;
+  sound_winner_available: boolean;
   confetti_enabled: boolean;
   company_logo_url: string | null;
   updated_at: string;
@@ -17,7 +20,13 @@ export async function getSettings(raffleEventId: string): Promise<RaffleSettings
     `select * from raffle_settings where raffle_event_id = $1`,
     [raffleEventId]
   );
-  if (existing) return existing;
+  if (existing) {
+    const [sound_audio_available, sound_winner_available] = await Promise.all([
+      hasRaffleSound(raffleEventId),
+      hasRaffleSound(raffleEventId, "winner"),
+    ]);
+    return { ...existing, sound_audio_available, sound_winner_available };
+  }
 
   // Insert defaults; handle a concurrent-creation race via ON CONFLICT.
   const created = await queryOne<RaffleSettingsRow>(
@@ -26,7 +35,11 @@ export async function getSettings(raffleEventId: string): Promise<RaffleSettings
      returning *`,
     [raffleEventId]
   );
-  return created as RaffleSettingsRow;
+  return {
+    ...(created as Omit<RaffleSettingsRow, "sound_audio_available" | "sound_winner_available">),
+    sound_audio_available: false,
+    sound_winner_available: false,
+  };
 }
 
 export async function updateSettings(
